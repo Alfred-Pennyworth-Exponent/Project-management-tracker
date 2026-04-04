@@ -1,7 +1,7 @@
-import { RefreshCw, LogIn, LogOut } from 'lucide-react'
+import { RefreshCw, LogIn, LogOut, Menu } from 'lucide-react'
 import { signIn, signOut } from '../../services/auth.js'
 
-export default function AuthBar({ user, token, onTokenChange, saveState, lastSync, onRefresh }) {
+export default function AuthBar({ user, token, onTokenChange, saveState, lastSync, onRefresh, onMenuOpen }) {
   const syncLabel = lastSync
     ? (() => {
         const diff = Math.floor((Date.now() - lastSync) / 1000)
@@ -15,19 +15,30 @@ export default function AuthBar({ user, token, onTokenChange, saveState, lastSyn
   const statusText  = saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Save failed' : syncLabel
 
   return (
-    <header className="h-12 flex items-center justify-between px-5 border-b border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-800 flex-shrink-0">
-      {/* Status */}
-      <div className="flex items-center gap-2.5">
-        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusColor}`} />
-        <span className="text-xs font-mono text-gray-400 dark:text-gray-500">{statusText}</span>
+    <header className="h-12 flex items-center justify-between px-4 border-b border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-800 flex-shrink-0">
+      <div className="flex items-center gap-2">
+        {/* Hamburger — mobile only */}
         <button
-          onClick={onRefresh}
-          className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors cursor-pointer"
-          aria-label="Refresh data"
-          title="Refresh data"
+          onClick={onMenuOpen}
+          className="sm:hidden p-2 -ml-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
+          aria-label="Open menu"
         >
-          <RefreshCw size={12} />
+          <Menu size={16} />
         </button>
+
+        {/* Status */}
+        <div className="flex items-center gap-2">
+          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusColor}`} />
+          <span className="text-xs font-mono text-gray-400 dark:text-gray-500 hidden xs:block sm:block">{statusText}</span>
+          <button
+            onClick={onRefresh}
+            className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors cursor-pointer"
+            aria-label="Refresh data"
+            title="Refresh data"
+          >
+            <RefreshCw size={12} />
+          </button>
+        </div>
       </div>
 
       {/* Auth */}
@@ -35,7 +46,7 @@ export default function AuthBar({ user, token, onTokenChange, saveState, lastSyn
         {token ? (
           <>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-brand/10 border border-brand/30 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-full bg-brand/10 border border-brand/30 flex items-center justify-center">
                 <span className="text-[10px] font-display font-bold text-brand">
                   {user?.slice(0, 2).toUpperCase() || 'U'}
                 </span>
@@ -44,10 +55,10 @@ export default function AuthBar({ user, token, onTokenChange, saveState, lastSyn
             </div>
             <button
               onClick={() => signOut(onTokenChange)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-body rounded-lg border border-gray-200 dark:border-surface-500 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-surface-700 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-body rounded-lg border border-gray-200 dark:border-surface-500 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-surface-700 transition-colors cursor-pointer min-h-[36px]"
             >
               <LogOut size={11} />
-              Sign out
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </>
         ) : (
@@ -57,10 +68,10 @@ export default function AuthBar({ user, token, onTokenChange, saveState, lastSyn
             </span>
             <button
               onClick={() => signIn()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display font-semibold rounded-lg bg-brand text-white hover:bg-brand-dark transition-colors cursor-pointer shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display font-semibold rounded-lg bg-brand text-white hover:bg-brand-dark transition-colors cursor-pointer shadow-sm min-h-[36px]"
             >
               <LogIn size={11} />
-              Sign in to edit
+              Sign in
             </button>
           </>
         )}

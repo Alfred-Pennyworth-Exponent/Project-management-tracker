@@ -47,7 +47,7 @@ function CAWCard({ item, onClick, isDragging }) {
 function DroppableColumn({ id, label, items, onCardClick, dragActive }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div className="flex flex-col flex-1 min-w-56 max-w-xs">
+    <div className="flex flex-col flex-shrink-0 flex-1 min-w-[82vw] sm:min-w-56 sm:max-w-xs snap-center sm:snap-align-none">
       <div className="flex items-center gap-2 mb-3">
         <h3 className="font-display text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</h3>
         <span className="text-xs font-mono text-gray-600 bg-gray-100 dark:bg-surface-600 px-1.5 py-0.5 rounded">{items.length}</span>
@@ -164,11 +164,11 @@ export default function CAWBoard({ data, token, save, append, onToast }) {
       </div>
 
       {/* Kanban */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden p-5">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden p-5 snap-x snap-mandatory sm:snap-none overscroll-x-contain">
         <DndContext sensors={sensors}
           onDragStart={({ active }) => setActiveId(active.id)}
           onDragEnd={handleDragEnd}>
-          <div className="flex gap-4 h-full min-w-max">
+          <div className="flex gap-4 h-full sm:min-w-max">
             {COLUMNS.map(col => (
               <DroppableColumn key={col} id={col} label={col}
                 items={grouped[col] || []}

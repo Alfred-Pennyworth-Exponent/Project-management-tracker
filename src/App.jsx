@@ -34,6 +34,11 @@ export default function App() {
     localStorage.setItem('theme', theme)
   }, [theme])
 
+  // Sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  useEffect(() => { localStorage.setItem('sidebar_collapsed', sidebarCollapsed) }, [sidebarCollapsed])
+
   // Auth
   const [token, setToken] = useState(() => getStoredToken())
   const [user, setUser] = useState(null)
@@ -77,6 +82,10 @@ export default function App() {
         onNavigate={setActiveView}
         theme={theme}
         onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed(c => !c)}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
       />
 
       {/* Main content area */}
@@ -88,6 +97,7 @@ export default function App() {
           saveState={saveState}
           lastSync={lastSync}
           onRefresh={refresh}
+          onMenuOpen={() => setMobileSidebarOpen(true)}
         />
 
         {/* View content */}
