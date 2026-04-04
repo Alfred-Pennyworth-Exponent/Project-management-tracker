@@ -11,37 +11,23 @@ const PRIORITIES = ['Critical', 'High', 'Low']
 function colLetter(idx) {
   if (idx < 0) return ''
   let result = '', n = idx + 1
-  while (n > 0) {
-    const rem = (n - 1) % 26
-    result = String.fromCharCode(65 + rem) + result
-    n = Math.floor((n - 1) / 26)
-  }
+  while (n > 0) { const rem = (n - 1) % 26; result = String.fromCharCode(65 + rem) + result; n = Math.floor((n - 1) / 26) }
   return result
 }
 
 function CAWCard({ item, onClick, isDragging }) {
   const days = daysFrom(item['ETA for Go-live'])
   const overdue = isOverdue(item['ETA for Go-live'])
-
   return (
-    <div
-      onClick={onClick}
-      className={`
-        bg-white dark:bg-surface-700 border rounded-lg p-3 cursor-pointer
-        hover:border-brand/40 transition-all duration-150 group
+    <div onClick={onClick}
+      className={`bg-white dark:bg-surface-700 border rounded-lg p-3 cursor-pointer hover:border-brand/40 transition-all duration-150 group
         ${isDragging ? 'opacity-50 rotate-1' : ''}
-        ${item['Status'] === 'Stuck' ? 'border-red-500/40' : 'border-gray-200 dark:border-surface-500'}
-      `}
-    >
+        ${item['Status'] === 'Stuck' ? 'border-red-300 dark:border-red-500/40' : 'border-gray-200 dark:border-surface-500'}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
-        <p className="text-sm font-body text-gray-800 dark:text-gray-200 leading-snug line-clamp-2">
-          {item['Current Area of Work']}
-        </p>
+        <p className="text-sm font-body text-gray-800 dark:text-gray-200 leading-snug line-clamp-2">{item['Current Area of Work']}</p>
         <StatusChip status={item['Priority']} size="xs" />
       </div>
-      {item['Related Module'] && (
-        <div className="text-xs font-mono text-gray-500 mb-2">{item['Related Module']}</div>
-      )}
+      {item['Related Module'] && <div className="text-xs font-mono text-gray-500 mb-2">{item['Related Module']}</div>}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {item['EE Team'] && <span className="text-xs text-gray-500">{item['EE Team']}</span>}
@@ -57,7 +43,8 @@ function CAWCard({ item, onClick, isDragging }) {
   )
 }
 
-function DroppableColumn({ id, label, items, onCardClick }) {
+// FRICTION-6: show drop zones when dragging
+function DroppableColumn({ id, label, items, onCardClick, dragActive }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
     <div className="flex flex-col flex-1 min-w-56 max-w-xs">
@@ -65,10 +52,15 @@ function DroppableColumn({ id, label, items, onCardClick }) {
         <h3 className="font-display text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</h3>
         <span className="text-xs font-mono text-gray-600 bg-gray-100 dark:bg-surface-600 px-1.5 py-0.5 rounded">{items.length}</span>
       </div>
-      <div
-        ref={setNodeRef}
-        className={`flex-1 rounded-xl p-2 space-y-2 min-h-24 transition-colors ${isOver ? 'bg-brand/5 border border-brand/30' : 'bg-gray-50 dark:bg-surface-700/30'}`}
-      >
+      <div ref={setNodeRef} className={`
+        flex-1 rounded-xl p-2 space-y-2 min-h-24 transition-all duration-150
+        ${isOver
+          ? 'bg-brand/5 border-2 border-brand/40 border-dashed'
+          : dragActive
+          ? 'border-2 border-dashed border-gray-300 dark:border-surface-500 bg-gray-50 dark:bg-surface-700/30'
+          : 'border-2 border-transparent bg-gray-50 dark:bg-surface-700/30'
+        }
+      `}>
         {items.map(item => (
           <DraggableCard key={item._idx} item={item} onCardClick={onCardClick} />
         ))}
@@ -86,15 +78,16 @@ function DraggableCard({ item, onCardClick }) {
   )
 }
 
-export default function CAWBoard({ data, token, save }) {
+export default function CAWBoard({ data, token, save, append, onToast }) {
   const [activeId, setActiveId] = useState(null)
   const [selectedItem, setSelectedItem] = useState(null)
   const [filterTeam, setFilterTeam] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [newItem, setNewItem] = useState({ Priority: 'High', Status: 'Open' })
 
   const rows = useMemo(() => (data[SHEET_NAMES.CAW] || []).map((r, i) => ({ ...r, _idx: i })), [data])
 
-  // Derive column letter for 'Status' from sheet header order — never hardcode
   const statusCol = useMemo(() => {
     if (!rows.length) return 'G'
     const keys = Object.keys(rows[0]).filter(k => k !== '_idx')
@@ -102,21 +95,16 @@ export default function CAWBoard({ data, token, save }) {
     return idx >= 0 ? colLetter(idx) : 'G'
   }, [rows])
 
-  const filtered = useMemo(() =>
-    rows.filter(r => {
-      if (filterTeam && r['EE Team'] !== filterTeam) return false
-      if (filterPriority && r['Priority'] !== filterPriority) return false
-      return true
-    }), [rows, filterTeam, filterPriority])
+  const filtered = useMemo(() => rows.filter(r => {
+    if (filterTeam && r['EE Team'] !== filterTeam) return false
+    if (filterPriority && r['Priority'] !== filterPriority) return false
+    return true
+  }), [rows, filterTeam, filterPriority])
 
   const grouped = useMemo(() => {
     const g = {}
     COLUMNS.forEach(c => { g[c] = [] })
-    filtered.forEach(r => {
-      const col = COLUMNS.includes(r['Status']) ? r['Status'] : 'Open'
-      g[col].push(r)
-    })
-    // Sort by priority
+    filtered.forEach(r => { const col = COLUMNS.includes(r['Status']) ? r['Status'] : 'Open'; g[col].push(r) })
     const order = { Critical: 0, High: 1, Low: 2 }
     COLUMNS.forEach(c => { g[c].sort((a, b) => (order[a['Priority']] ?? 3) - (order[b['Priority']] ?? 3)) })
     return g
@@ -131,6 +119,23 @@ export default function CAWBoard({ data, token, save }) {
     const item = rows.find(r => String(r._idx) === active.id)
     if (!item || item['Status'] === over.id) return
     save([{ range: `${SHEET_NAMES.CAW}!${statusCol}${item._idx + 2}`, values: [[over.id]] }])
+  }
+
+  // STUB-4: Add New Item
+  const handleAddItem = async () => {
+    if (!newItem['Current Area of Work']?.trim()) { onToast?.('Work item description required', 'error'); return }
+    await append(SHEET_NAMES.CAW, [[
+      newItem['Current Area of Work'] || '',
+      newItem['Related Module'] || '',
+      newItem['EE Team'] || '',
+      newItem['EE SPOC'] || '',
+      newItem['Priority'] || 'High',
+      newItem['ETA for Go-live'] || '',
+      'Open',
+    ]])
+    onToast?.('Item added', 'success')
+    setShowAdd(false)
+    setNewItem({ Priority: 'High', Status: 'Open' })
   }
 
   const activeItem = activeId ? rows.find(r => String(r._idx) === activeId) : null
@@ -151,10 +156,8 @@ export default function CAWBoard({ data, token, save }) {
           {PRIORITIES.map(p => <option key={p}>{p}</option>)}
         </select>
         {token && (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-body bg-brand text-white rounded-lg hover:bg-brand-dark transition-colors cursor-pointer ml-auto"
-          >
+          <button onClick={() => setShowAdd(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-body bg-brand text-white rounded-lg hover:bg-brand-dark transition-colors cursor-pointer ml-auto">
             <Plus size={13} /> New Item
           </button>
         )}
@@ -162,20 +165,15 @@ export default function CAWBoard({ data, token, save }) {
 
       {/* Kanban */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden p-5">
-        <DndContext
-          sensors={sensors}
+        <DndContext sensors={sensors}
           onDragStart={({ active }) => setActiveId(active.id)}
-          onDragEnd={handleDragEnd}
-        >
+          onDragEnd={handleDragEnd}>
           <div className="flex gap-4 h-full min-w-max">
             {COLUMNS.map(col => (
-              <DroppableColumn
-                key={col}
-                id={col}
-                label={col}
+              <DroppableColumn key={col} id={col} label={col}
                 items={grouped[col] || []}
                 onCardClick={setSelectedItem}
-              />
+                dragActive={activeId !== null} />
             ))}
           </div>
           <DragOverlay>
@@ -184,7 +182,7 @@ export default function CAWBoard({ data, token, save }) {
         </DndContext>
       </div>
 
-      {/* Edit Modal */}
+      {/* Detail Modal */}
       {selectedItem && (
         <Modal title="CAW Item" onClose={() => setSelectedItem(null)} size="md">
           <div className="space-y-3">
@@ -198,11 +196,8 @@ export default function CAWBoard({ data, token, save }) {
             ].map(({ label, key }) => (
               <div key={key}>
                 <label className="text-xs text-gray-500 font-mono mb-1 block">{label}</label>
-                <input
-                  defaultValue={selectedItem[key]}
-                  disabled={!token}
-                  className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50 disabled:opacity-60"
-                />
+                <input defaultValue={selectedItem[key]} disabled={!token}
+                  className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50 disabled:opacity-60" />
               </div>
             ))}
             <div className="grid grid-cols-2 gap-3">
@@ -223,17 +218,53 @@ export default function CAWBoard({ data, token, save }) {
             </div>
           </div>
           <div className="flex items-center gap-2 mt-5">
-            <div>
-              <p className="text-xs text-gray-500 font-mono mb-1">ETA: {formatDate(selectedItem['ETA for Go-live'])}</p>
-            </div>
+            <p className="text-xs text-gray-500 font-mono">ETA: {formatDate(selectedItem['ETA for Go-live'])}</p>
             <div className="ml-auto flex gap-2">
               <button onClick={() => setSelectedItem(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 cursor-pointer">Close</button>
-              {token && (
-                <button className="px-4 py-2 text-sm font-display font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark cursor-pointer">
-                  Save
-                </button>
-              )}
+              {token && <button className="px-4 py-2 text-sm font-display font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark cursor-pointer">Save</button>}
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Add New Item Modal — STUB-4 */}
+      {showAdd && (
+        <Modal title="New CAW Item" onClose={() => setShowAdd(false)}>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-gray-500 font-mono mb-1 block">Current Area of Work *</label>
+              <input value={newItem['Current Area of Work'] || ''} onChange={e => setNewItem(p => ({ ...p, 'Current Area of Work': e.target.value }))}
+                className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50"
+                placeholder="Describe the work item" />
+            </div>
+            {['Related Module', 'EE Team', 'EE SPOC'].map(f => (
+              <div key={f}>
+                <label className="text-xs text-gray-500 font-mono mb-1 block">{f}</label>
+                <input value={newItem[f] || ''} onChange={e => setNewItem(p => ({ ...p, [f]: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50" />
+              </div>
+            ))}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 font-mono mb-1 block">Priority</label>
+                <select value={newItem['Priority'] || 'High'} onChange={e => setNewItem(p => ({ ...p, Priority: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg cursor-pointer text-gray-800 dark:text-gray-200">
+                  {PRIORITIES.map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-mono mb-1 block">ETA</label>
+                <input type="date" value={newItem['ETA for Go-live'] || ''} onChange={e => setNewItem(p => ({ ...p, 'ETA for Go-live': e.target.value }))}
+                  className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg cursor-pointer text-gray-300" />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-5">
+            <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 cursor-pointer">Cancel</button>
+            <button onClick={handleAddItem}
+              className="px-4 py-2 text-sm font-display font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark cursor-pointer">
+              Add Item
+            </button>
           </div>
         </Modal>
       )}

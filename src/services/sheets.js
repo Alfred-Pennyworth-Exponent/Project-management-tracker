@@ -56,14 +56,15 @@ export async function batchWrite(updates, token) {
   return res.json()
 }
 
-// ─── Append row ──────────────────────────────────────────────────────────────
-export async function appendRow(sheetName, rowValues, token) {
+// ─── Append rows (one or many) ────────────────────────────────────────────────
+export async function appendRows(sheetName, rows, token) {
+  // rows: 2-D array — e.g. [['Wk-15','Module A','Ongoing','…','']]
   const range = encodeURIComponent(`${sheetName}!A1`)
   const url = `${BASE}/${SHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=OVERWRITE&access_token=${token}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values: [rowValues] }),
+    body: JSON.stringify({ values: rows }),
   })
   if (!res.ok) throw new Error(`Sheets append error: ${res.status}`)
   return res.json()

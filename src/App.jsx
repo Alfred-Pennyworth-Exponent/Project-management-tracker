@@ -59,7 +59,7 @@ export default function App() {
   const { data, loading, error, lastSync, refresh } = useSheets(ALL_SHEETS, token)
 
   // Save
-  const { save, saveState } = useSave(token)
+  const { save, append, saveState } = useSave(token)
 
   // Toast
   const [toast, setToast] = useState(null)
@@ -120,6 +120,7 @@ export default function App() {
               data={data}
               token={token}
               save={save}
+              append={append}
               onNavigate={setActiveView}
               onToast={showToast}
             />
