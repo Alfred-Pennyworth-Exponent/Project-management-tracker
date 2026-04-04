@@ -362,7 +362,8 @@ export default function GanttView({ data, token, save, onToast }) {
   const [saving, setSaving]           = useState(false)
 
   // Bar drag state — use ref for stable callbacks + state for re-render
-  const dragRef = useRef(null)          // { task, type, startX, origStart, origEnd, timelineWidth, moved }
+  const dragRef        = useRef(null)   // { task, type, startX, origStart, origEnd, timelineWidth, moved }
+  const dragPreviewRef = useRef(null)   // mirrors dragPreview state — safe to read inside event handlers
   const [activeBarId, setActiveBarId]   = useState(null)
   const [dragPreview, setDragPreview]   = useState(null)
 
@@ -531,14 +532,18 @@ export default function GanttView({ data, token, save, onToast }) {
       const deltaMs   = deltaDays * DAY_MS
 
       if (d.type === 'move') {
-        setDragPreview({
+        const preview = {
           start: new Date(d.origStart.getTime() + deltaMs),
           end:   new Date(d.origEnd.getTime()   + deltaMs),
-        })
+        }
+        dragPreviewRef.current = preview
+        setDragPreview(preview)
       } else {
         const newEnd = new Date(d.origEnd.getTime() + deltaMs)
         if (newEnd > d.origStart) {
-          setDragPreview({ start: d.origStart, end: newEnd })
+          const preview = { start: d.origStart, end: newEnd }
+          dragPreviewRef.current = preview
+          setDragPreview(preview)
         }
       }
     }
@@ -556,9 +561,11 @@ export default function GanttView({ data, token, save, onToast }) {
         return
       }
 
-      setDragPreview(prev => {
-        if (!prev) return null
+      const prev = dragPreviewRef.current
+      dragPreviewRef.current = null
+      setDragPreview(null)
 
+      if (prev) {
         const { task, type } = d
         const sheetRow = task._sheetIdx + 2
         const updates  = []
@@ -591,9 +598,7 @@ export default function GanttView({ data, token, save, onToast }) {
           save(updates)
           onToast?.('Dates updated', 'success')
         }
-
-        return null
-      })
+      }
     }
 
     window.addEventListener('pointermove', onMove)
