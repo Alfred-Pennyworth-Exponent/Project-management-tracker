@@ -81,6 +81,7 @@ function DraggableCard({ item, onCardClick }) {
 export default function CAWBoard({ data, token, save, append, onToast }) {
   const [activeId, setActiveId] = useState(null)
   const [selectedItem, setSelectedItem] = useState(null)
+  const [editValues, setEditValues] = useState({})   // controlled state for detail modal
   const [filterTeam, setFilterTeam] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
   const [showAdd, setShowAdd] = useState(false)
@@ -88,12 +89,16 @@ export default function CAWBoard({ data, token, save, append, onToast }) {
 
   const rows = useMemo(() => (data[SHEET_NAMES.CAW] || []).map((r, i) => ({ ...r, _idx: i })), [data])
 
-  const statusCol = useMemo(() => {
-    if (!rows.length) return 'G'
+  // Derive column letter map from header order (like GanttView/PBITracker)
+  const colMap = useMemo(() => {
+    if (!rows.length) return {}
     const keys = Object.keys(rows[0]).filter(k => k !== '_idx')
-    const idx = keys.indexOf('Status')
-    return idx >= 0 ? colLetter(idx) : 'G'
+    const m = {}
+    keys.forEach((k, i) => { m[k] = colLetter(i) })
+    return m
   }, [rows])
+
+  const statusCol = colMap['Status'] || 'G'
 
   const filtered = useMemo(() => rows.filter(r => {
     if (filterTeam && r['EE Team'] !== filterTeam) return false
@@ -138,6 +143,39 @@ export default function CAWBoard({ data, token, save, append, onToast }) {
     setNewItem({ Priority: 'High', Status: 'Open' })
   }
 
+  const openDetail = (item) => {
+    setSelectedItem(item)
+    setEditValues({
+      'Current Area of Work': item['Current Area of Work'] || '',
+      'Related Module':       item['Related Module'] || '',
+      'EE Team':              item['EE Team'] || '',
+      'EE SPOC':              item['EE SPOC'] || '',
+      'League Member':        item['League Member'] || '',
+      'Comments':             item['Comments'] || '',
+      'Priority':             item['Priority'] || 'High',
+      'Status':               item['Status'] || 'Open',
+    })
+  }
+
+  const handleDetailSave = () => {
+    if (!selectedItem) return
+    const sheetRow = selectedItem._idx + 2
+    const updates = []
+    const fields = [
+      'Current Area of Work', 'Related Module', 'EE Team',
+      'EE SPOC', 'Priority', 'ETA for Go-live', 'Status',
+      'League Member', 'Comments',
+    ]
+    fields.forEach(f => {
+      if (colMap[f] && editValues[f] !== undefined) {
+        updates.push({ range: `${SHEET_NAMES.CAW}!${colMap[f]}${sheetRow}`, values: [[editValues[f]]] })
+      }
+    })
+    if (updates.length) save(updates)
+    onToast?.('CAW item saved', 'success')
+    setSelectedItem(null)
+  }
+
   const activeItem = activeId ? rows.find(r => String(r._idx) === activeId) : null
 
   return (
@@ -172,7 +210,7 @@ export default function CAWBoard({ data, token, save, append, onToast }) {
             {COLUMNS.map(col => (
               <DroppableColumn key={col} id={col} label={col}
                 items={grouped[col] || []}
-                onCardClick={setSelectedItem}
+                onCardClick={openDetail}
                 dragActive={activeId !== null} />
             ))}
           </div>
@@ -196,21 +234,30 @@ export default function CAWBoard({ data, token, save, append, onToast }) {
             ].map(({ label, key }) => (
               <div key={key}>
                 <label className="text-xs text-gray-500 font-mono mb-1 block">{label}</label>
-                <input defaultValue={selectedItem[key]} disabled={!token}
+                <input
+                  value={editValues[key] ?? ''}
+                  onChange={e => setEditValues(p => ({ ...p, [key]: e.target.value }))}
+                  disabled={!token}
                   className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50 disabled:opacity-60" />
               </div>
             ))}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500 font-mono mb-1 block">Priority</label>
-                <select disabled={!token} defaultValue={selectedItem['Priority']}
+                <select
+                  value={editValues['Priority'] ?? 'High'}
+                  onChange={e => setEditValues(p => ({ ...p, Priority: e.target.value }))}
+                  disabled={!token}
                   className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 cursor-pointer disabled:opacity-60">
                   {PRIORITIES.map(p => <option key={p}>{p}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs text-gray-500 font-mono mb-1 block">Status</label>
-                <select disabled={!token} defaultValue={selectedItem['Status']}
+                <select
+                  value={editValues['Status'] ?? 'Open'}
+                  onChange={e => setEditValues(p => ({ ...p, Status: e.target.value }))}
+                  disabled={!token}
                   className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 cursor-pointer disabled:opacity-60">
                   {COLUMNS.map(c => <option key={c}>{c}</option>)}
                 </select>
@@ -221,7 +268,7 @@ export default function CAWBoard({ data, token, save, append, onToast }) {
             <p className="text-xs text-gray-500 font-mono">ETA: {formatDate(selectedItem['ETA for Go-live'])}</p>
             <div className="ml-auto flex gap-2">
               <button onClick={() => setSelectedItem(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 cursor-pointer">Close</button>
-              {token && <button className="px-4 py-2 text-sm font-display font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark cursor-pointer">Save</button>}
+              {token && <button onClick={handleDetailSave} className="px-4 py-2 text-sm font-display font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark cursor-pointer">Save</button>}
             </div>
           </div>
         </Modal>

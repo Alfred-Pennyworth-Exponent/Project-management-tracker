@@ -5,12 +5,31 @@ import InlineEdit from '../components/ui/InlineEdit.jsx'
 import { formatDate, SHEET_NAMES } from '../config.js'
 import { Plus } from 'lucide-react'
 
-export default function ScopeTracker({ data, token, save, onToast }) {
-  const [selectedSession, setSelectedSession] = useState(null)
-  const [showAdd, setShowAdd] = useState(false)
+function colLetter(idx) {
+  let result = '', n = idx + 1
+  while (n > 0) { const rem = (n - 1) % 26; result = String.fromCharCode(65 + rem) + result; n = Math.floor((n - 1) / 26) }
+  return result
+}
 
-  const vsInput = data[SHEET_NAMES.VS_INPUT] || []
-  const scopeRows = data[SHEET_NAMES.SCOPE_TRACKER] || []
+export default function ScopeTracker({ data, token, save, append, onToast }) {
+  const [selectedSession, setSelectedSession] = useState(null)
+  const [editValues, setEditValues] = useState({})
+  const [showAdd, setShowAdd] = useState(false)
+  const [newSession, setNewSession] = useState({})
+
+  const vsInput   = data[SHEET_NAMES.VS_INPUT]      || []
+  const scopeRows = data[SHEET_NAMES.SCOPE_TRACKER]  || []
+
+  // Derive column maps from header order — never hardcode column letters
+  const vsColMap = useMemo(() => {
+    if (!vsInput.length) return {}
+    return Object.fromEntries(Object.keys(vsInput[0]).map((k, i) => [k, colLetter(i)]))
+  }, [vsInput])
+
+  const scopeColMap = useMemo(() => {
+    if (!scopeRows.length) return {}
+    return Object.fromEntries(Object.keys(scopeRows[0]).map((k, i) => [k, colLetter(i)]))
+  }, [scopeRows])
 
   const vsMap = useMemo(() => {
     const m = {}
@@ -19,20 +38,63 @@ export default function ScopeTracker({ data, token, save, onToast }) {
   }, [vsInput])
 
   const handlePriorityChange = (module, value) => {
-    if (!token) return onToast('Sign in to edit', 'error')
+    if (!token) return onToast?.('Sign in to edit', 'error')
     const row = vsMap[module]
-    if (!row) return
-    save([{ range: `${SHEET_NAMES.VS_INPUT}!C${row._idx + 2}`, values: [[value]] }])
+    if (!row || !vsColMap['Priority']) return
+    save([{ range: `${SHEET_NAMES.VS_INPUT}!${vsColMap['Priority']}${row._idx + 2}`, values: [[value]] }])
   }
 
   const handleVSNoteChange = (module, value) => {
-    if (!token) return onToast('Sign in to edit', 'error')
+    if (!token) return onToast?.('Sign in to edit', 'error')
     const row = vsMap[module]
-    if (!row) return
-    save([{ range: `${SHEET_NAMES.VS_INPUT}!B${row._idx + 2}`, values: [[value]] }])
+    if (!row || !vsColMap['VS Notes']) return
+    save([{ range: `${SHEET_NAMES.VS_INPUT}!${vsColMap['VS Notes']}${row._idx + 2}`, values: [[value]] }])
   }
 
-  const allModules = [...new Set([...Object.keys(vsMap), ...scopeRows.map(r => r['Module'])])].sort()
+  const openSession = (row, idx) => {
+    setSelectedSession({ ...row, _idx: idx })
+    setEditValues({
+      'Module':                           row['Module'] || '',
+      'Owner':                            row['Owner'] || '',
+      'Priority':                         row['Priority'] || '',
+      'Status':                           row['Status'] || '',
+      'Session Duration':                 row['Session Duration'] || '',
+      'Deliverable':                      row['Deliverable'] || '',
+      'Description of findings':          row['Description of findings'] || '',
+      'Discussion points for next meeting': row['Discussion points for next meeting'] || '',
+    })
+  }
+
+  const handleSessionSave = () => {
+    if (!selectedSession) return
+    const sheetRow = selectedSession._idx + 2
+    const updates = []
+    Object.entries(editValues).forEach(([field, value]) => {
+      if (scopeColMap[field]) {
+        updates.push({ range: `${SHEET_NAMES.SCOPE_TRACKER}!${scopeColMap[field]}${sheetRow}`, values: [[value]] })
+      }
+    })
+    if (updates.length) save(updates)
+    onToast?.('Session saved', 'success')
+    setSelectedSession(null)
+  }
+
+  const handleAddSession = async () => {
+    if (!newSession['Module']?.trim()) { onToast?.('Module is required', 'error'); return }
+    await append(SHEET_NAMES.SCOPE_TRACKER, [[
+      newSession['Module'] || '',
+      newSession['Owner'] || '',
+      newSession['Priority'] || '',
+      newSession['Status'] || 'Open',
+      newSession['Session Duration'] || '',
+      newSession['Deliverable'] || '',
+      newSession['Description of findings'] || '',
+      newSession['Discussion points for next meeting'] || '',
+    ]])
+    onToast?.('Session added', 'success')
+    setShowAdd(false)
+    setNewSession({})
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden font-body">
@@ -90,7 +152,7 @@ export default function ScopeTracker({ data, token, save, onToast }) {
             {scopeRows.map((row, i) => (
               <div
                 key={i}
-                onClick={() => setSelectedSession({ ...row, _idx: i })}
+                onClick={() => openSession(row, i)}
                 className="bg-white dark:bg-surface-700 border border-gray-200 dark:border-surface-500 rounded-xl p-4 cursor-pointer hover:border-brand/40 transition-all"
               >
                 <div className="flex items-center justify-between mb-2">
@@ -117,7 +179,7 @@ export default function ScopeTracker({ data, token, save, onToast }) {
         </div>
       </div>
 
-      {/* Session Detail Modal */}
+      {/* Session Detail Modal — now controlled + wired save */}
       {selectedSession && (
         <Modal title={`Scope Session — ${selectedSession['Module']}`} onClose={() => setSelectedSession(null)} size="lg">
           <div className="grid grid-cols-2 gap-4">
@@ -132,7 +194,8 @@ export default function ScopeTracker({ data, token, save, onToast }) {
               <div key={key}>
                 <label className="text-xs font-mono text-gray-500 mb-1 block">{label}</label>
                 <input
-                  defaultValue={selectedSession[key]}
+                  value={editValues[key] ?? ''}
+                  onChange={e => setEditValues(p => ({ ...p, [key]: e.target.value }))}
                   disabled={!token}
                   className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50 disabled:opacity-60"
                 />
@@ -142,7 +205,8 @@ export default function ScopeTracker({ data, token, save, onToast }) {
           <div className="mt-3">
             <label className="text-xs font-mono text-gray-500 mb-1 block">Description of Findings</label>
             <textarea
-              defaultValue={selectedSession['Description of findings']}
+              value={editValues['Description of findings'] ?? ''}
+              onChange={e => setEditValues(p => ({ ...p, 'Description of findings': e.target.value }))}
               disabled={!token}
               rows={3}
               className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50 disabled:opacity-60 resize-none"
@@ -151,7 +215,8 @@ export default function ScopeTracker({ data, token, save, onToast }) {
           <div className="mt-3">
             <label className="text-xs font-mono text-gray-500 mb-1 block">Discussion Points</label>
             <textarea
-              defaultValue={selectedSession['Discussion points for next meeting']}
+              value={editValues['Discussion points for next meeting'] ?? ''}
+              onChange={e => setEditValues(p => ({ ...p, 'Discussion points for next meeting': e.target.value }))}
               disabled={!token}
               rows={3}
               className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50 disabled:opacity-60 resize-none"
@@ -159,7 +224,54 @@ export default function ScopeTracker({ data, token, save, onToast }) {
           </div>
           <div className="flex justify-end gap-2 mt-5">
             <button onClick={() => setSelectedSession(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 cursor-pointer">Close</button>
-            {token && <button className="px-4 py-2 text-sm font-display font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark cursor-pointer">Save</button>}
+            {token && <button onClick={handleSessionSave} className="px-4 py-2 text-sm font-display font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark cursor-pointer">Save</button>}
+          </div>
+        </Modal>
+      )}
+
+      {/* New Session Modal — TC-27 */}
+      {showAdd && (
+        <Modal title="New Scope Session" onClose={() => setShowAdd(false)}>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Module *', key: 'Module' },
+              { label: 'Owner', key: 'Owner' },
+              { label: 'Priority', key: 'Priority' },
+              { label: 'Status', key: 'Status' },
+              { label: 'Session Duration', key: 'Session Duration' },
+              { label: 'Deliverable', key: 'Deliverable' },
+            ].map(({ label, key }) => (
+              <div key={key}>
+                <label className="text-xs font-mono text-gray-500 mb-1 block">{label}</label>
+                <input
+                  value={newSession[key] || ''}
+                  onChange={e => setNewSession(p => ({ ...p, [key]: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-3">
+            <label className="text-xs font-mono text-gray-500 mb-1 block">Description of Findings</label>
+            <textarea
+              value={newSession['Description of findings'] || ''}
+              onChange={e => setNewSession(p => ({ ...p, 'Description of findings': e.target.value }))}
+              rows={2}
+              className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50 resize-none"
+            />
+          </div>
+          <div className="mt-3">
+            <label className="text-xs font-mono text-gray-500 mb-1 block">Discussion Points</label>
+            <textarea
+              value={newSession['Discussion points for next meeting'] || ''}
+              onChange={e => setNewSession(p => ({ ...p, 'Discussion points for next meeting': e.target.value }))}
+              rows={2}
+              className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-surface-600 border border-gray-300 dark:border-surface-400 rounded-lg text-gray-800 dark:text-gray-200 outline-none focus:border-brand/50 resize-none"
+            />
+          </div>
+          <div className="flex justify-end gap-2 mt-5">
+            <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 cursor-pointer">Cancel</button>
+            <button onClick={handleAddSession} className="px-4 py-2 text-sm font-display font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark cursor-pointer">Add Session</button>
           </div>
         </Modal>
       )}

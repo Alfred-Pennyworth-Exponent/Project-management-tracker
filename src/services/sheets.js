@@ -10,7 +10,7 @@ async function readToken(userToken) {
 // ─── Read ────────────────────────────────────────────────────────────────────
 export async function readSheet(sheetName, userToken = null) {
   const token = await readToken(userToken)
-  const range = encodeURIComponent(`${sheetName}!A1:Z2000`)
+  const range = encodeURIComponent(`${sheetName}!A1:ZZ5000`)
   const url = `${BASE}/${SHEET_ID}/values/${range}?access_token=${token}`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Sheets read error: ${res.status}`)
@@ -20,7 +20,7 @@ export async function readSheet(sheetName, userToken = null) {
 
 export async function readSheetRaw(sheetName, userToken = null) {
   const token = await readToken(userToken)
-  const range = encodeURIComponent(`${sheetName}!A1:Z2000`)
+  const range = encodeURIComponent(`${sheetName}!A1:ZZ5000`)
   const url = `${BASE}/${SHEET_ID}/values/${range}?access_token=${token}`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Sheets read error: ${res.status}`)
