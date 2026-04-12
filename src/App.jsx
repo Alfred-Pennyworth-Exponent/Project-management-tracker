@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import Sidebar from './components/layout/Sidebar.jsx'
 import AuthBar from './components/layout/AuthBar.jsx'
 import Toast from './components/ui/Toast.jsx'
+import SheetGallery from './components/SheetGallery.jsx'
+import NewProjectWizard from './components/NewProjectWizard.jsx'
 import Overview from './views/Overview.jsx'
 import GanttView from './views/GanttView.jsx'
 import PBITracker from './views/PBITracker.jsx'
@@ -11,6 +13,7 @@ import ScopeTracker from './views/ScopeTracker.jsx'
 import Increments from './views/Increments.jsx'
 import { useSheets } from './hooks/useSheets.js'
 import { useSave } from './hooks/useSave.js'
+import { useSheetGallery } from './hooks/useSheetGallery.js'
 import { initGoogleAuth, getStoredToken } from './services/auth.js'
 import { SHEET_NAMES } from './config.js'
 
@@ -41,12 +44,11 @@ export default function App() {
 
   // Auth
   const [token, setToken] = useState(() => getStoredToken())
-  const [user, setUser] = useState(null)
+  const [user, setUser]   = useState(null)
   useEffect(() => {
     initGoogleAuth((newToken) => {
       setToken(newToken)
       if (newToken) {
-        // Fetch user email from token info
         fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${newToken}`)
           .then(r => r.json())
           .then(d => setUser(d.email || d.name || 'User'))
@@ -60,17 +62,35 @@ export default function App() {
   // Navigation
   const [activeView, setActiveView] = useState('overview')
 
-  // Data
-  const { data, loading, error, lastSync, refresh } = useSheets(ALL_SHEETS, token)
+  // Sheet gallery
+  const {
+    projects, currentId, currentProject, addProject, removeProject, switchProject,
+  } = useSheetGallery()
 
-  // Save
-  const { save, append, saveState } = useSave(token)
+  // Modal state
+  const [showGallery, setShowGallery] = useState(false)
+  const [showWizard,  setShowWizard]  = useState(false)
+
+  // Data — uses currentId (dynamic sheet switching)
+  const { data, loading, error, lastSync, refresh } = useSheets(ALL_SHEETS, token, currentId)
+
+  // Save — uses currentId
+  const { save, append, saveState } = useSave(token, currentId)
 
   // Toast
   const [toast, setToast] = useState(null)
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type, id: Date.now() })
   }, [])
+
+  // Handle new project created
+  const handleProjectCreated = useCallback((project) => {
+    addProject(project)
+    setShowWizard(false)
+    // Switch to new project (reloads page)
+    localStorage.setItem('currentSheetId', project.id)
+    window.location.reload()
+  }, [addProject])
 
   const ActiveView = VIEWS[activeView] || Overview
 
@@ -98,6 +118,10 @@ export default function App() {
           lastSync={lastSync}
           onRefresh={refresh}
           onMenuOpen={() => setMobileSidebarOpen(true)}
+          currentProject={currentProject}
+          currentSheetId={currentId}
+          onOpenGallery={() => setShowGallery(true)}
+          onOpenWizard={() => setShowWizard(true)}
         />
 
         {/* View content */}
@@ -137,6 +161,24 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Sheet Gallery modal */}
+      {showGallery && (
+        <SheetGallery
+          onClose={() => setShowGallery(false)}
+          onOpenWizard={() => { setShowGallery(false); setShowWizard(true) }}
+        />
+      )}
+
+      {/* New Project Wizard modal */}
+      {showWizard && (
+        <NewProjectWizard
+          token={token}
+          user={user}
+          onClose={() => setShowWizard(false)}
+          onCreated={handleProjectCreated}
+        />
+      )}
 
       {/* Toast */}
       {toast && (

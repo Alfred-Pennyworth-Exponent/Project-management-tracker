@@ -8,63 +8,65 @@ async function readToken(userToken) {
 }
 
 // ─── Read ────────────────────────────────────────────────────────────────────
-export async function readSheet(sheetName, userToken = null) {
+export async function readSheet(sheetName, userToken = null, sheetId = null) {
+  const id    = sheetId || SHEET_ID
   const token = await readToken(userToken)
   const range = encodeURIComponent(`${sheetName}!A1:ZZ5000`)
-  const url = `${BASE}/${SHEET_ID}/values/${range}?access_token=${token}`
-  const res = await fetch(url)
+  const url   = `${BASE}/${id}/values/${range}?access_token=${token}`
+  const res   = await fetch(url)
   if (!res.ok) throw new Error(`Sheets read error: ${res.status}`)
-  const data = await res.json()
+  const data  = await res.json()
   return rowsToObjects(data.values || [])
 }
 
-export async function readSheetRaw(sheetName, userToken = null) {
+export async function readSheetRaw(sheetName, userToken = null, sheetId = null) {
+  const id    = sheetId || SHEET_ID
   const token = await readToken(userToken)
   const range = encodeURIComponent(`${sheetName}!A1:ZZ5000`)
-  const url = `${BASE}/${SHEET_ID}/values/${range}?access_token=${token}`
-  const res = await fetch(url)
+  const url   = `${BASE}/${id}/values/${range}?access_token=${token}`
+  const res   = await fetch(url)
   if (!res.ok) throw new Error(`Sheets read error: ${res.status}`)
-  const data = await res.json()
+  const data  = await res.json()
   return data.values || []
 }
 
 // ─── Write single cell / range ────────────────────────────────────────────────
-export async function writeCell(sheetName, row, col, value, token) {
-  const colLetter = colToLetter(col)
-  const range = encodeURIComponent(`${sheetName}!${colLetter}${row}`)
-  const url = `${BASE}/${SHEET_ID}/values/${range}?valueInputOption=USER_ENTERED&access_token=${token}`
-  const res = await fetch(url, {
-    method: 'PUT',
+export async function writeCell(sheetName, row, col, value, token, sheetId = null) {
+  const id         = sheetId || SHEET_ID
+  const colLetter  = colToLetter(col)
+  const range      = encodeURIComponent(`${sheetName}!${colLetter}${row}`)
+  const url        = `${BASE}/${id}/values/${range}?valueInputOption=USER_ENTERED&access_token=${token}`
+  const res        = await fetch(url, {
+    method:  'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values: [[value]] }),
+    body:    JSON.stringify({ values: [[value]] }),
   })
   if (!res.ok) throw new Error(`Sheets write error: ${res.status}`)
   return res.json()
 }
 
 // ─── Batch update multiple ranges ─────────────────────────────────────────────
-export async function batchWrite(updates, token) {
-  // updates: [{ range: 'Sheet!A1', values: [[val]] }, ...]
-  console.debug('[batchWrite]', JSON.stringify(updates))
-  const url = `${BASE}/${SHEET_ID}/values:batchUpdate?access_token=${token}`
+export async function batchWrite(updates, token, sheetId = null) {
+  const id  = sheetId || SHEET_ID
+  const url = `${BASE}/${id}/values:batchUpdate?access_token=${token}`
   const res = await fetch(url, {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updates }),
+    body:    JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updates }),
   })
   if (!res.ok) throw new Error(`Sheets batch write error: ${res.status}`)
   return res.json()
 }
 
 // ─── Append rows (one or many) ────────────────────────────────────────────────
-export async function appendRows(sheetName, rows, token) {
-  // rows: 2-D array — e.g. [['Wk-15','Module A','Ongoing','…','']]
+export async function appendRows(sheetName, rows, token, sheetId = null) {
+  const id    = sheetId || SHEET_ID
   const range = encodeURIComponent(`${sheetName}!A1`)
-  const url = `${BASE}/${SHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=OVERWRITE&access_token=${token}`
-  const res = await fetch(url, {
-    method: 'POST',
+  const url   = `${BASE}/${id}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=OVERWRITE&access_token=${token}`
+  const res   = await fetch(url, {
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values: rows }),
+    body:    JSON.stringify({ values: rows }),
   })
   if (!res.ok) throw new Error(`Sheets append error: ${res.status}`)
   return res.json()
@@ -74,10 +76,8 @@ export async function appendRows(sheetName, rows, token) {
 function rowsToObjects(rows) {
   if (!rows.length) return []
   const headers = rows[0].map(h => h?.toString().trim())
-  // Use a unique sentinel key for blank/duplicate headers so that Object.keys()
-  // always returns one entry per column — preserving correct column positions.
-  const seen = {}
-  const keys = headers.map((h, i) => {
+  const seen    = {}
+  const keys    = headers.map((h, i) => {
     if (!h) return `_col_${i}`
     if (seen[h] !== undefined) return `${h}_${i}`
     seen[h] = i

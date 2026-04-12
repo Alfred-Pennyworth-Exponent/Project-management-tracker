@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { readSheet } from '../services/sheets.js'
+import { SHEET_ID } from '../config.js'
 
-export function useSheets(sheetNames, token) {
-  const [data, setData] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+export function useSheets(sheetNames, token, sheetId = null) {
+  const id = sheetId || SHEET_ID
+
+  const [data,     setData]     = useState({})
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState(null)
   const [lastSync, setLastSync] = useState(null)
   const mountedRef = useRef(true)
 
@@ -13,7 +16,7 @@ export function useSheets(sheetNames, token) {
     setError(null)
     try {
       const results = await Promise.all(
-        sheetNames.map(name => readSheet(name, token).then(rows => [name, rows]))
+        sheetNames.map(name => readSheet(name, token, id).then(rows => [name, rows]))
       )
       if (!mountedRef.current) return
       setData(Object.fromEntries(results))
@@ -23,7 +26,7 @@ export function useSheets(sheetNames, token) {
     } finally {
       if (mountedRef.current) setLoading(false)
     }
-  }, [sheetNames.join(','), token])
+  }, [sheetNames.join(','), token, id])
 
   useEffect(() => {
     mountedRef.current = true
