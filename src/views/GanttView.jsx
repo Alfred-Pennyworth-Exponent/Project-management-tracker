@@ -599,7 +599,7 @@ function AddItemModal({ onClose, onAdd, existingModules, existingPhases }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function GanttView({ data, token, save, append, onToast }) {
+export default function GanttView({ data, token, save, append, onToast, onRefresh }) {
   const [phaseFilter, setPhaseFilter] = useState('All')
   const [zoom, setZoom]               = useState('Month')
   const [selected, setSelected]       = useState(null)
@@ -911,7 +911,7 @@ export default function GanttView({ data, token, save, append, onToast }) {
   }, [token, watchtowerColMap, watchtowerByModule, save, onToast])
 
   // ─── Add item ──────────────────────────────────────────────────────────────
-  const handleAdd = useCallback(async ({ type, name, pbiId, phase, module, site, app, doctype, stage, status, dates }) => {
+  const handleAdd = useCallback(async ({ type, name, pbiId, phase, module, site, app, stage, status, dates }) => {
     const d = (key) => {
       const v = dates[key]
       if (!v) return ''
@@ -930,26 +930,27 @@ export default function GanttView({ data, token, save, append, onToast }) {
       ]
       await append(SHEET_NAMES.WATCHTOWER, [row])
       onToast?.(`Submodule "${name}" added`, 'success')
+      onRefresh?.()
       return
     }
 
     // For phase or module: append to both Module Gantt Data and Phase Gantt Data
-    const moduleName = type === 'phase' ? name : name
+    const moduleName = name
     const phaseNum   = phase || ''
 
-    // Module Gantt Data row: Module Name, Phase, VS Priority, Scope Start, Dev Start, UAT Start, Mig Start, Go Live, Inc Start, Inc End, Inc Type
+    // Module Gantt Data row
     const moduleGanttRow = [
       moduleName, phaseNum, '', d('scopeStart'), d('devStart'), d('uatStart'), d('migStart'), d('goLive'), '', '', '',
     ]
     await append(SHEET_NAMES.MODULE_GANTT, [moduleGanttRow])
 
-    // Phase Gantt Data — one row per lifecycle stage
+    // Phase Gantt Data — one row per lifecycle stage with a date
     const stageDates = [
-      ['Scope Discovery', d('scopeStart'),  d('devStart')],
-      ['Development',     d('devStart'),    d('uatStart')],
-      ['UAT',             d('uatStart'),    d('migStart')],
-      ['Migration',       d('migStart'),    d('goLive')],
-      ['Go-Live',         d('goLive'),      ''],
+      ['Scope Discovery', d('scopeStart'), d('devStart')],
+      ['Development',     d('devStart'),   d('uatStart')],
+      ['UAT',             d('uatStart'),   d('migStart')],
+      ['Migration',       d('migStart'),   d('goLive')],
+      ['Go-Live',         d('goLive'),     ''],
     ]
     const phaseGanttRows = stageDates
       .filter(([, start]) => start)
@@ -957,7 +958,7 @@ export default function GanttView({ data, token, save, append, onToast }) {
 
     await append(SHEET_NAMES.PHASE_GANTT, phaseGanttRows)
 
-    // Also add a Watchtower row for Scope Discovery stage
+    // Watchtower row for Scope Discovery stage
     const watchtowerRow = [
       moduleName, '', phaseNum, site || '', app || '', '0', '', '', 'Scope Discovery', 'Open', '',
       d('scopeStart'), d('devStart'), d('uatStart'), d('migStart'), d('goLive'), '',
@@ -965,7 +966,8 @@ export default function GanttView({ data, token, save, append, onToast }) {
     await append(SHEET_NAMES.WATCHTOWER, [watchtowerRow])
 
     onToast?.(`${type === 'phase' ? 'Phase' : 'Module'} "${name}" added`, 'success')
-  }, [watchtowerRows, append, onToast])
+    onRefresh?.()
+  }, [watchtowerRows, append, onToast, onRefresh])
 
   const existingModules = useMemo(() => [...new Set(tasks.map(t => t.module))], [tasks])
   const existingPhases  = useMemo(() => [...new Set(tasks.map(t => t.phase).filter(Boolean))], [tasks])

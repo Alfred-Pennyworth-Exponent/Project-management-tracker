@@ -157,6 +157,7 @@ export default function App() {
               append={append}
               onNavigate={setActiveView}
               onToast={showToast}
+              onRefresh={refresh}
             />
           )}
         </main>
