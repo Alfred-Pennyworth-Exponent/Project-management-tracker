@@ -10,7 +10,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { SHEET_NAMES } from '../config.js'
 import StatusChip from '../components/ui/StatusChip.jsx'
-import { Filter, GripVertical, Target, X, Save } from 'lucide-react'
+import { Filter, GripVertical, Target, X, Save, Plus } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ROW_H   = 36
@@ -371,14 +371,242 @@ function DetailPanel({ task, localEdits, onClose, onSave, token, vsMap, saving }
   )
 }
 
+const LIFECYCLE_STAGES = ['Scope Discovery', 'Development', 'UAT', 'Migration']
+
+// ─── Add Item Modal ───────────────────────────────────────────────────────────
+function AddItemModal({ onClose, onAdd, existingModules, existingPhases }) {
+  const [type,      setType]      = useState('module')   // 'phase' | 'module' | 'submodule'
+  const [name,      setName]      = useState('')
+  const [pbiId,     setPbiId]     = useState('')
+  const [phase,     setPhase]     = useState('')
+  const [newPhase,  setNewPhase]  = useState('')
+  const [module,    setModule]    = useState('')
+  const [newModule, setNewModule] = useState('')
+  const [site,      setSite]      = useState('')
+  const [app,       setApp]       = useState('')
+  const [doctype,   setDoctype]   = useState('')
+  const [stage,     setStage]     = useState('Scope Discovery')
+  const [status,    setStatus]    = useState('Open')
+  const [dates, setDates] = useState({
+    scopeStart: '', devStart: '', uatStart: '', migStart: '', goLive: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const phaseOptions  = [...new Set(existingPhases)].sort()
+  const moduleOptions = [...new Set(existingModules)].sort()
+
+  const resolvedPhase  = phase  === '__new__' ? newPhase  : phase
+  const resolvedModule = module === '__new__' ? newModule : module
+
+  const isValid = () => {
+    if (type === 'submodule') {
+      return resolvedModule && name && dates.scopeStart && dates.goLive
+    }
+    return name.trim() && dates.scopeStart && dates.goLive
+  }
+
+  const handleAdd = async () => {
+    if (!isValid()) return
+    setSaving(true)
+    await onAdd({ type, name: name.trim(), pbiId, phase: resolvedPhase, module: resolvedModule, site, app, doctype, stage, status, dates })
+    setSaving(false)
+    onClose()
+  }
+
+  const inputCls = 'w-full text-xs font-mono bg-white dark:bg-surface-700 border border-gray-200 dark:border-surface-500 rounded px-2 py-1.5 text-gray-700 dark:text-gray-300'
+  const labelCls = 'block text-xs text-gray-400 mb-1'
+  const dateFields = [
+    { key: 'scopeStart', label: 'Scope Discovery Start' },
+    { key: 'devStart',   label: 'Dev Start' },
+    { key: 'uatStart',   label: 'UAT Start' },
+    { key: 'migStart',   label: 'Migration Start' },
+    { key: 'goLive',     label: 'Go-Live Date' },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-surface-800 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-surface-600">
+          <h2 className="font-display text-sm font-bold text-gray-900 dark:text-gray-100">Add to Gantt</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-surface-700 cursor-pointer">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+          {/* Type selector */}
+          <div>
+            <label className={labelCls}>Type</label>
+            <div className="flex gap-1 bg-gray-100 dark:bg-surface-700 rounded-lg p-0.5">
+              {[
+                { value: 'phase',     label: 'Phase' },
+                { value: 'module',    label: 'Module' },
+                { value: 'submodule', label: 'Submodule (PBI)' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setType(opt.value)}
+                  className={[
+                    'flex-1 px-2 py-1.5 text-xs font-mono rounded-md transition-colors cursor-pointer',
+                    type === opt.value
+                      ? 'bg-white dark:bg-surface-600 shadow-sm text-gray-900 dark:text-gray-100'
+                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+                  ].join(' ')}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Phase */}
+          {(type === 'module' || type === 'submodule') && (
+            <div>
+              <label className={labelCls}>Phase</label>
+              <select value={phase} onChange={e => setPhase(e.target.value)} className={inputCls}>
+                <option value="">— select —</option>
+                {phaseOptions.map(p => <option key={p} value={p}>Phase {p}</option>)}
+                <option value="__new__">+ New phase…</option>
+              </select>
+              {phase === '__new__' && (
+                <input
+                  className={inputCls + ' mt-1.5'}
+                  placeholder="Phase number (e.g. 3)"
+                  value={newPhase}
+                  onChange={e => setNewPhase(e.target.value)}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Module (for submodule type) */}
+          {type === 'submodule' && (
+            <div>
+              <label className={labelCls}>Module</label>
+              <select value={module} onChange={e => setModule(e.target.value)} className={inputCls}>
+                <option value="">— select —</option>
+                {moduleOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                <option value="__new__">+ New module…</option>
+              </select>
+              {module === '__new__' && (
+                <input
+                  className={inputCls + ' mt-1.5'}
+                  placeholder="Module name"
+                  value={newModule}
+                  onChange={e => setNewModule(e.target.value)}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Name */}
+          <div>
+            <label className={labelCls}>
+              {type === 'phase'     ? 'Phase Name / Label' :
+               type === 'module'    ? 'Module Name' :
+                                      'Submodule / PBI Name (Doctype)'}
+            </label>
+            <input className={inputCls} value={name} onChange={e => setName(e.target.value)} placeholder={
+              type === 'phase'     ? 'e.g. EHS Compliance' :
+              type === 'module'    ? 'e.g. Fleet Management' :
+                                     'e.g. Recruitment'
+            } />
+          </div>
+
+          {/* PBI ID — submodule only */}
+          {type === 'submodule' && (
+            <div>
+              <label className={labelCls}>PBI ID</label>
+              <input className={inputCls} value={pbiId} onChange={e => setPbiId(e.target.value)} placeholder="PBI-0120" />
+            </div>
+          )}
+
+          {/* Site / App / Stage — submodule only */}
+          {type === 'submodule' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Site (L0)</label>
+                  <input className={inputCls} value={site} onChange={e => setSite(e.target.value)} placeholder="ERP" />
+                </div>
+                <div>
+                  <label className={labelCls}>App (L1)</label>
+                  <input className={inputCls} value={app} onChange={e => setApp(e.target.value)} placeholder="ERPNext" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Stage</label>
+                  <select value={stage} onChange={e => setStage(e.target.value)} className={inputCls}>
+                    {WATCHTOWER_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Dev Status</label>
+                  <select value={status} onChange={e => setStatus(e.target.value)} className={inputCls}>
+                    {['Open', 'Ongoing', 'Released to Test Site', 'Released to Prod Site', 'Cancelled'].map(s =>
+                      <option key={s} value={s}>{s}</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Dates */}
+          <div>
+            <label className={labelCls}>Dates</label>
+            <div className="space-y-2">
+              {(type === 'submodule'
+                ? dateFields
+                : dateFields
+              ).map(({ key, label }) => (
+                <div key={key} className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-gray-400 w-32 flex-shrink-0">{label}</span>
+                  <input
+                    type="date"
+                    value={dates[key]}
+                    onChange={e => setDates(d => ({ ...d, [key]: e.target.value }))}
+                    className={inputCls + ' flex-1'}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-200 dark:border-surface-600 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs font-body rounded-lg border border-gray-200 dark:border-surface-500 text-gray-500 hover:bg-gray-50 dark:hover:bg-surface-700 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAdd}
+            disabled={saving || !isValid()}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display font-semibold rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+          >
+            <Plus size={12} />
+            {saving ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function GanttView({ data, token, save, onToast }) {
+export default function GanttView({ data, token, save, append, onToast }) {
   const [phaseFilter, setPhaseFilter] = useState('All')
   const [zoom, setZoom]               = useState('Month')
   const [selected, setSelected]       = useState(null)
   const [localEdits, setLocalEdits]   = useState({})  // { [taskId]: { start, end, stage } }
   const [rowOrder, setRowOrder]       = useState([])   // module names in display order
   const [saving, setSaving]           = useState(false)
+  const [showAdd, setShowAdd]         = useState(false)
 
   // Bar drag state — use ref for stable callbacks + state for re-render
   const dragRef        = useRef(null)   // { task, type, startX, origStart, origEnd, timelineWidth, moved }
@@ -682,6 +910,66 @@ export default function GanttView({ data, token, save, onToast }) {
     onToast?.('Changes saved', 'success')
   }, [token, watchtowerColMap, watchtowerByModule, save, onToast])
 
+  // ─── Add item ──────────────────────────────────────────────────────────────
+  const handleAdd = useCallback(async ({ type, name, pbiId, phase, module, site, app, doctype, stage, status, dates }) => {
+    const d = (key) => {
+      const v = dates[key]
+      if (!v) return ''
+      const [y, m, day] = v.split('-')
+      return `${day}/${m}/${y}`
+    }
+
+    if (type === 'submodule') {
+      // Append one row to Watchtower Roadmap only
+      const mod = module || name
+      const watchtowerHeaders = watchtowerRows.length ? Object.keys(watchtowerRows[0]) : []
+      // Build row matching header order: Module, PBIID, Phase, Site-L0, App-L1, % L2, Doctype-L3, Function, Stage-L3, Dev Status, Priority, Scope Start, Dev Start, UAT Start, Mig Start, Go Live, Notes
+      const row = [
+        mod, pbiId, phase, site, app, '0', name, '', stage, status, '',
+        d('scopeStart'), d('devStart'), d('uatStart'), d('migStart'), d('goLive'), '',
+      ]
+      await append(SHEET_NAMES.WATCHTOWER, [row])
+      onToast?.(`Submodule "${name}" added`, 'success')
+      return
+    }
+
+    // For phase or module: append to both Module Gantt Data and Phase Gantt Data
+    const moduleName = type === 'phase' ? name : name
+    const phaseNum   = phase || ''
+
+    // Module Gantt Data row: Module Name, Phase, VS Priority, Scope Start, Dev Start, UAT Start, Mig Start, Go Live, Inc Start, Inc End, Inc Type
+    const moduleGanttRow = [
+      moduleName, phaseNum, '', d('scopeStart'), d('devStart'), d('uatStart'), d('migStart'), d('goLive'), '', '', '',
+    ]
+    await append(SHEET_NAMES.MODULE_GANTT, [moduleGanttRow])
+
+    // Phase Gantt Data — one row per lifecycle stage
+    const stageDates = [
+      ['Scope Discovery', d('scopeStart'),  d('devStart')],
+      ['Development',     d('devStart'),    d('uatStart')],
+      ['UAT',             d('uatStart'),    d('migStart')],
+      ['Migration',       d('migStart'),    d('goLive')],
+      ['Go-Live',         d('goLive'),      ''],
+    ]
+    const phaseGanttRows = stageDates
+      .filter(([, start]) => start)
+      .map(([stageName, start, end]) => [moduleName, stageName, start, end || '', '', '', ''])
+
+    await append(SHEET_NAMES.PHASE_GANTT, phaseGanttRows)
+
+    // Also add a Watchtower row for Scope Discovery stage
+    const watchtowerRow = [
+      moduleName, '', phaseNum, site || '', app || '', '0', '', '', 'Scope Discovery', 'Open', '',
+      d('scopeStart'), d('devStart'), d('uatStart'), d('migStart'), d('goLive'), '',
+    ]
+    await append(SHEET_NAMES.WATCHTOWER, [watchtowerRow])
+
+    onToast?.(`${type === 'phase' ? 'Phase' : 'Module'} "${name}" added`, 'success')
+  }, [watchtowerRows, append, onToast])
+
+  const existingModules = useMemo(() => [...new Set(tasks.map(t => t.module))], [tasks])
+  const existingPhases  = useMemo(() => [...new Set(tasks.map(t => t.phase).filter(Boolean))], [tasks])
+
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full overflow-hidden">
@@ -732,6 +1020,17 @@ export default function GanttView({ data, token, save, onToast }) {
               {phases.map(p => <option key={p} value={p}>Phase {p}</option>)}
             </select>
           </div>
+
+          {/* Add button */}
+          {token && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-display font-semibold rounded-lg bg-brand text-white hover:bg-brand-dark transition-colors cursor-pointer shadow-sm"
+            >
+              <Plus size={12} />
+              Add
+            </button>
+          )}
 
           {/* Edit mode hint */}
           {token && (
@@ -860,6 +1159,16 @@ export default function GanttView({ data, token, save, onToast }) {
           token={token}
           vsMap={vsMap}
           saving={saving}
+        />
+      )}
+
+      {/* Add item modal */}
+      {showAdd && (
+        <AddItemModal
+          onClose={() => setShowAdd(false)}
+          onAdd={handleAdd}
+          existingModules={existingModules}
+          existingPhases={existingPhases}
         />
       )}
     </div>
