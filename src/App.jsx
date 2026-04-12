@@ -72,7 +72,7 @@ export default function App() {
   const [showWizard,  setShowWizard]  = useState(false)
 
   // Data — uses currentId (dynamic sheet switching)
-  const { data, loading, error, lastSync, refresh } = useSheets(ALL_SHEETS, token, currentId)
+  const { data, loading, error, lastSync, refresh } = useSheets(ALL_SHEETS, token, currentId, setToken)
 
   // Save — uses currentId
   const { save, append, saveState } = useSave(token, currentId)

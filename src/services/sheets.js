@@ -15,6 +15,7 @@ export async function readSheet(sheetName, userToken = null, sheetId = null) {
   const url   = `${BASE}/${id}/values/${range}?access_token=${token}`
   const res   = await fetch(url)
   if (res.status === 400) return []   // tab doesn't exist in this sheet
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH_EXPIRED')
   if (!res.ok) throw new Error(`Sheets read error: ${res.status}`)
   const data  = await res.json()
   return rowsToObjects(data.values || [])
@@ -27,6 +28,7 @@ export async function readSheetRaw(sheetName, userToken = null, sheetId = null) 
   const url   = `${BASE}/${id}/values/${range}?access_token=${token}`
   const res   = await fetch(url)
   if (res.status === 400) return []   // tab doesn't exist in this sheet
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH_EXPIRED')
   if (!res.ok) throw new Error(`Sheets read error: ${res.status}`)
   const data  = await res.json()
   return data.values || []
