@@ -14,6 +14,7 @@ export async function readSheet(sheetName, userToken = null, sheetId = null) {
   const range = encodeURIComponent(`${sheetName}!A1:ZZ5000`)
   const url   = `${BASE}/${id}/values/${range}?access_token=${token}`
   const res   = await fetch(url)
+  if (res.status === 400) return []   // tab doesn't exist in this sheet
   if (!res.ok) throw new Error(`Sheets read error: ${res.status}`)
   const data  = await res.json()
   return rowsToObjects(data.values || [])
@@ -25,6 +26,7 @@ export async function readSheetRaw(sheetName, userToken = null, sheetId = null) 
   const range = encodeURIComponent(`${sheetName}!A1:ZZ5000`)
   const url   = `${BASE}/${id}/values/${range}?access_token=${token}`
   const res   = await fetch(url)
+  if (res.status === 400) return []   // tab doesn't exist in this sheet
   if (!res.ok) throw new Error(`Sheets read error: ${res.status}`)
   const data  = await res.json()
   return data.values || []
