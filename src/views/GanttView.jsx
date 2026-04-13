@@ -618,9 +618,19 @@ export default function GanttView({ data, token, save, append, onToast, onRefres
   const timelineBodyRef   = useRef(null)  // inner content div
 
   // ─── Data ──────────────────────────────────────────────────────────────────
-  const phaseGantt     = data[SHEET_NAMES.PHASE_GANTT] || []
-  const watchtowerRows = data[SHEET_NAMES.WATCHTOWER]  || []
-  const vsInput        = data[SHEET_NAMES.VS_INPUT]    || []
+  const phaseGantt     = data[SHEET_NAMES.PHASE_GANTT]    || []
+  const moduleGantt    = data[SHEET_NAMES.MODULE_GANTT]   || []
+  const watchtowerRows = data[SHEET_NAMES.WATCHTOWER]     || []
+  const vsInput        = data[SHEET_NAMES.VS_INPUT]       || []
+
+  // Module → phase number (source of truth: Module Gantt Data)
+  const modulePhaseMap = useMemo(() => {
+    const m = {}
+    moduleGantt.forEach(r => {
+      if (r['Module Name'] && r['Phase']) m[r['Module Name']] = String(r['Phase'])
+    })
+    return m
+  }, [moduleGantt])
 
   const vsMap = useMemo(() => {
     const m = {}
@@ -655,18 +665,19 @@ export default function GanttView({ data, token, save, append, onToast, onRefres
         const start = parseDateStr(r['Start Date'])
         const end   = parseDateStr(r['End Date'])
         if (!start || !end || end < start) return null
+        const moduleName = r['Module Name']
         return {
           id: i,
           _sheetIdx: i,
-          module: r['Module Name'],
+          module: moduleName,
           stage:  r['Module Stage'],
-          phase:  r['Phase'],
+          phase:  r['Phase'] || modulePhaseMap[moduleName] || '',
           start,
           end,
         }
       })
       .filter(Boolean),
-    [phaseGantt]
+    [phaseGantt, modulePhaseMap]
   )
 
   const phases = useMemo(() =>
@@ -700,6 +711,25 @@ export default function GanttView({ data, token, save, append, onToast, onRefres
       .map(m => [m, map.get(m)])
       .filter(([, tasks]) => tasks?.length)
   }, [moduleGroups, rowOrder])
+
+  // Build render list: interleave phase header rows between module groups
+  // Each item is either { type:'header', phase } or { type:'module', module, moduleTasks }
+  const renderList = useMemo(() => {
+    if (phaseFilter !== 'All') {
+      return orderedGroups.map(([module, moduleTasks]) => ({ type: 'module', module, moduleTasks }))
+    }
+    const items = []
+    let lastPhase = null
+    orderedGroups.forEach(([module, moduleTasks]) => {
+      const phase = moduleTasks[0]?.phase || ''
+      if (phase && phase !== lastPhase) {
+        items.push({ type: 'header', phase })
+        lastPhase = phase
+      }
+      items.push({ type: 'module', module, moduleTasks })
+    })
+    return items
+  }, [orderedGroups, phaseFilter])
 
   // Timeline bounds
   const { timeStart, timeEnd, months, totalMs } = useMemo(() => {
@@ -1125,24 +1155,53 @@ export default function GanttView({ data, token, save, append, onToast, onRefres
                 onDragEnd={handleRowDragEnd}
               >
                 <SortableContext items={rowOrder} strategy={verticalListSortingStrategy}>
-                  {orderedGroups.map(([module, moduleTasks]) => (
-                    <SortableRow
-                      key={module}
-                      id={module}
-                      module={module}
-                      moduleTasks={moduleTasks}
-                      months={months}
-                      pct={pct}
-                      timeStart={timeStart}
-                      timeEnd={timeEnd}
-                      token={token}
-                      onBarPointerDown={onBarPointerDown}
-                      onBarClick={setSelected}
-                      localEdits={localEdits}
-                      activeBarId={activeBarId}
-                      dragPreview={dragPreview}
-                    />
-                  ))}
+                  {renderList.map((item, i) => {
+                    if (item.type === 'header') {
+                      return (
+                        <div
+                          key={`phase-${item.phase}-${i}`}
+                          className="flex border-b border-gray-200 dark:border-surface-600 bg-gray-50 dark:bg-surface-900/60 sticky"
+                          style={{ height: 28 }}
+                        >
+                          <div
+                            style={{ width: LABEL_W, minWidth: LABEL_W }}
+                            className="flex items-center gap-2 px-3 border-r border-gray-200 dark:border-surface-600 flex-shrink-0"
+                          >
+                            <span className="text-[10px] font-display font-bold text-brand uppercase tracking-widest">
+                              Phase {item.phase}
+                            </span>
+                          </div>
+                          <div className="flex-1 relative">
+                            {months.map((m, mi) => (
+                              <div
+                                key={mi}
+                                className="absolute top-0 bottom-0 border-r border-gray-100 dark:border-surface-700/30 pointer-events-none"
+                                style={{ left: `${pct(new Date(m.getFullYear(), m.getMonth() + 1, 1))}%` }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return (
+                      <SortableRow
+                        key={item.module}
+                        id={item.module}
+                        module={item.module}
+                        moduleTasks={item.moduleTasks}
+                        months={months}
+                        pct={pct}
+                        timeStart={timeStart}
+                        timeEnd={timeEnd}
+                        token={token}
+                        onBarPointerDown={onBarPointerDown}
+                        onBarClick={setSelected}
+                        localEdits={localEdits}
+                        activeBarId={activeBarId}
+                        dragPreview={dragPreview}
+                      />
+                    )
+                  })}
                 </SortableContext>
               </DndContext>
 
